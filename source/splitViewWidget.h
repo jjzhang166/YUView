@@ -19,11 +19,16 @@
 #ifndef SPLITVIEWWIDGET_H
 #define SPLITVIEWWIDGET_H
 
-#include <QWidget>
+#include <QGLWidget>
+#include <QOpenGLFunctions>
+#include <QOpenGLBuffer>
 #include <QDockWidget>
 #include <QMouseEvent>
 #include "ui_splitViewWidgetControls.h"
 #include "playlistItem.h"
+
+#include <QOpenGLShaderProgram>
+#include <QOpenGLTexture>
 
 enum ViewMode {SIDE_BY_SIDE, COMPARISON};
 
@@ -46,12 +51,13 @@ enum ViewMode {SIDE_BY_SIDE, COMPARISON};
 class PlaylistTreeWidget;
 class PlaybackController;
 
-class splitViewWidget : public QWidget
+class splitViewWidget : public QGLWidget, protected QOpenGLFunctions
 {
   Q_OBJECT
 
 public:
   explicit splitViewWidget(QWidget *parent = 0, bool separateView=false);
+  ~splitViewWidget();
 
   /// Activate/Deactivate the splitting view. Only use this function!
   void setSplitEnabled(bool splitting);
@@ -130,11 +136,27 @@ private slots:
   void on_playbackPrimaryCheckBox_toggled(bool state);
 
 protected:
-  
+
+  // -------- OpenGL ----------
+  void initializeGL() Q_DECL_OVERRIDE;
+  void paintGL() Q_DECL_OVERRIDE;
+  void resizeGL(int width, int height) Q_DECL_OVERRIDE;
+  QOpenGLTexture *textures[6];
+  QOpenGLShaderProgram *program;
+  QColor clearColor;
+  int xRot;
+  int yRot;
+  int zRot;
+  QOpenGLBuffer vbo;
+  void makeObject();
+  int timerId;
+  virtual void timerEvent(QTimerEvent * event) Q_DECL_OVERRIDE;
+  // ----------------------
+
   // The controls for the splitView (splitView, drawGrid ...)
   Ui::splitViewControlsWidget *controls;
 
-  virtual void paintEvent(QPaintEvent *event) Q_DECL_OVERRIDE;
+  //virtual void paintEvent(QPaintEvent *event) Q_DECL_OVERRIDE;
   virtual void mouseMoveEvent(QMouseEvent * event) Q_DECL_OVERRIDE;
   virtual void mousePressEvent(QMouseEvent * event) Q_DECL_OVERRIDE;
   virtual void mouseReleaseEvent(QMouseEvent * event) Q_DECL_OVERRIDE;

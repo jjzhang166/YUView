@@ -88,8 +88,8 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
   separateViewWindow.splitView->setPlaylistTreeWidget( p_playlistWidget );
 
   // load geometry and active dockable widgets from user preferences
-  restoreGeometry(settings.value("mainWindow/geometry").toByteArray());
-  restoreState(settings.value("mainWindow/windowState").toByteArray());
+  //restoreGeometry(settings.value("mainWindow/geometry").toByteArray());
+  //restoreState(settings.value("mainWindow/windowState").toByteArray());
   separateViewWindow.restoreGeometry(settings.value("separateViewWindow/geometry").toByteArray());
   separateViewWindow.restoreState(settings.value("separateViewWindow/windowState").toByteArray());
   
