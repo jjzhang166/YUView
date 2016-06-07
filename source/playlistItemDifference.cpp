@@ -65,7 +65,7 @@ QList<infoItem> playlistItemDifference::getInfoList()
   return infoList;
 }
 
-void playlistItemDifference::drawItem(QPainter *painter, int frameIdx, double zoomFactor, bool playback)
+void playlistItemDifference::drawItem(QPainter *painter, int frameIdx, double zoomFactor, bool playback, const QMatrix4x4 &modelViewProjectionMatrix)
 {
   Q_UNUSED(playback);
 
@@ -90,7 +90,7 @@ void playlistItemDifference::drawItem(QPainter *painter, int frameIdx, double zo
   }
 
   // draw the videoHandler
-  difference.drawFrame(painter, frameIdx, zoomFactor);
+  difference.drawFrame(painter, frameIdx, zoomFactor, modelViewProjectionMatrix);
 }
 
 QSize playlistItemDifference::getSize() 

@@ -29,6 +29,14 @@
 #include "playbackController.h"
 #include "videoHandler.h"
 
+#define SPLITVIEW_DEBUG_OUTPUT 0
+#if SPLITVIEW_DEBUG_OUTPUT
+#include <QDebug>
+#define DEBUG_SPLITVIEW qDebug
+#else
+#define DEBUG_SPLITVIEW(fmt,...) ((void)0)
+#endif
+
 splitViewWidget::splitViewWidget(QWidget *parent, bool separateView)
   : QOpenGLWidget(parent)
 {
@@ -71,16 +79,7 @@ splitViewWidget::splitViewWidget(QWidget *parent, bool separateView)
   // We want to have all mouse events (even move)
   setMouseTracking(true);
 
-  // OPENGL
-  clearColor = Qt::black;
-  xRot = 0;
-  yRot = 0;
-  zRot = 0;
-  program = NULL;
-  for (int i = 0; i < 6; i++)
-    textures[i] = NULL;
-  startTimer(50, Qt::PreciseTimer);
-
+  // Set multisampling to 4 samples
   QSurfaceFormat format;
   format.setSamples(4);
   setFormat(format);
@@ -89,14 +88,6 @@ splitViewWidget::splitViewWidget(QWidget *parent, bool separateView)
 splitViewWidget::~splitViewWidget()
 {
   makeCurrent();
-  vbo.destroy();
-  for (int i = 0; i < 6; i++)
-    if (textures[i])
-      textures[i]->destroy();
-  delete program;
-  delete vertexBuffer;
-  delete indexBuffer;
-  delete shader;
   doneCurrent();
 }
 
@@ -136,238 +127,246 @@ void splitViewWidget::updateSettings()
   zoomBoxBackgroundColor = settings.value("Background/Color").value<QColor>();
 }
 
-//void splitViewWidget::paintEvent(QPaintEvent *paint_event)
-//{
-//  //qDebug() << paint_event->rect();
-//  Q_UNUSED(paint_event);
-//
-//  if (!playlist)
-//    // The playlist was not initialized yet. Nothing to draw (yet)
-//    return;
-//
-//  QPainter painter(this);
-//
-//  // Get the full size of the area that we can draw on (from the paint device base)
-//  QPoint drawArea_botR(width(), height());
-//  
-//  if (isViewFrozen)
-//  {
-//    // Just draw the pixmap of the frozen view in the center of the current widget
-//    int x = (drawArea_botR.x() - frozenViewImage.size().width()) / 2;
-//    int y = (drawArea_botR.y() - frozenViewImage.size().height()) / 2;
-//    painter.drawPixmap(x, y, frozenViewImage);
-//    return;
-//  }
-//  
-//  // Get the current frame to draw
-//  int frame = playback->getCurrentFrame();
-//
-//  // Get the playlist item(s) to draw
-//  playlistItem *item[2];
-//  playlist->getSelectedItems(item[0], item[1]);
-//  bool anyItemsSelected = item[0] != NULL || item[1] != NULL;
-//
-//  // The x position of the split (if splitting)
-//  int xSplit = int(drawArea_botR.x() * splittingPoint);
-//
-//  // First determine the center points per of each view
-//  QPoint centerPoints[2];
-//  if (viewMode == COMPARISON || !splitting)
-//  {
-//    // For comparison mode, both items have the same center point, in the middle of the view widget
-//    // This is equal to the scenario of not splitting
-//    centerPoints[0] = drawArea_botR / 2;
-//    centerPoints[1] = centerPoints[0];
-//  }
-//  else
-//  {
-//    // For side by side mode, the center points are centered in each individual split view 
-//    int y = drawArea_botR.y() / 2;
-//    centerPoints[0] = QPoint( xSplit / 2, y );
-//    centerPoints[1] = QPoint( xSplit + (drawArea_botR.x() - xSplit) / 2, y );
-//  }
-//
-//  // For the zoom box, calculate the pixel position under the cursor for each view. The following
-//  // things are calculated in this function:
-//  bool    pixelPosInItem[2] = {false, false};  //< Is the pixel position under the curser within the item?
-//  QRect   zoomPixelRect[2];                    //< A rect around the pixel that is under the cursor
-//  if (anyItemsSelected && drawZoomBox)
-//  {
-//    // We now have the pixel difference value for the item under the cursor. 
-//    // We now draw one zoom box per view
-//    int viewNum = (splitting && item[1]) ? 2 : 1;
-//    for (int view=0; view<viewNum; view++)
-//    {
-//      // Get the size of the item
-//      double itemSize[2];
-//      itemSize[0] = item[view]->getSize().width();
-//      itemSize[1] = item[view]->getSize().height();
-//            
-//      // Is the pixel under the cursor within the item?
-//      pixelPosInItem[view] = (zoomBoxPixelUnderCursor[view].x() >= 0 && zoomBoxPixelUnderCursor[view].x() < itemSize[0]) &&
-//                             (zoomBoxPixelUnderCursor[view].y() >= 0 && zoomBoxPixelUnderCursor[view].y() < itemSize[1]);
-//
-//      // Mark the pixel under the cursor with a rect around it.
-//      if (pixelPosInItem[view])
-//      {
-//        int pixelPoint[2];
-//        pixelPoint[0] = -((itemSize[0] / 2 - zoomBoxPixelUnderCursor[view].x()) * zoomFactor);
-//        pixelPoint[1] = -((itemSize[1] / 2 - zoomBoxPixelUnderCursor[view].y()) * zoomFactor);
-//        zoomPixelRect[view] = QRect(pixelPoint[0], pixelPoint[1], zoomFactor, zoomFactor);
-//      }
-//    }
-//  }
-//
-//  if (splitting)
-//  {
-//    // Draw two items (or less, if less items are selected)
-//    if (item[0])
-//    {
-//      // Set clipping to the left region
-//      QRegion clip = QRegion(0, 0, xSplit, drawArea_botR.y());
-//      painter.setClipRegion( clip );
-//
-//      // Translate the painter to the position where we want the item to be
-//      painter.translate( centerPoints[0] + centerOffset );
-//
-//      // Draw the item at position (0,0)
-//      item[0]->drawItem( &painter, frame, zoomFactor, playback->playing() );
-//
-//      // Paint the regular gird
-//      if (drawRegularGrid)
-//        paintRegularGrid(&painter, item[0]);
-//
-//      if (pixelPosInItem[0])
-//      {
-//        // If the zoom box is active, draw a rect around the pixel currently under the cursor
-//        frameHandler *vid = item[0]->getFrameHandler();
-//        if (vid)
-//        {
-//          painter.setPen( vid->isPixelDark(zoomBoxPixelUnderCursor[0]) ? Qt::white : Qt::black );
-//          painter.drawRect( zoomPixelRect[0] );
-//        }
-//      }
-//
-//      // Do the inverse translation of the painter
-//      painter.resetTransform();
-//
-//      // Paint the zoom box for view 0
-//      paintZoomBox(0, &painter, xSplit, drawArea_botR, item[0], frame, zoomBoxPixelUnderCursor[0], pixelPosInItem[0], zoomFactor );
-//    }
-//    if (item[1])
-//    {
-//      // Set clipping to the right region
-//      QRegion clip = QRegion(xSplit, 0, drawArea_botR.x() - xSplit, drawArea_botR.y());
-//      painter.setClipRegion( clip );
-//
-//      // Translate the painter to the position where we want the item to be
-//      painter.translate( centerPoints[1] + centerOffset );
-//
-//      // Draw the item at position (0,0)
-//      item[1]->drawItem( &painter, frame, zoomFactor, playback->playing() );
-//
-//      // Paint the regular gird
-//      if (drawRegularGrid)
-//        paintRegularGrid(&painter, item[1]);
-//
-//      if (pixelPosInItem[1])
-//      {
-//        // If the zoom box is active, draw a rect around the pixel currently under the cursor
-//        frameHandler *vid = item[1]->getFrameHandler();
-//        if (vid)
-//        {
-//          painter.setPen( vid->isPixelDark(zoomBoxPixelUnderCursor[1]) ? Qt::white : Qt::black );
-//          painter.drawRect( zoomPixelRect[1] );
-//        }
-//      }
-//
-//      // Do the inverse translation of the painter
-//      painter.resetTransform();
-//
-//      // Paint the zoom box for view 0
-//      paintZoomBox(1, &painter, xSplit, drawArea_botR, item[1], frame, zoomBoxPixelUnderCursor[1], pixelPosInItem[1], zoomFactor );
-//    }
-//
-//    // Disable clipping
-//    painter.setClipping( false );
-//  }
-//  else // (!splitting)
-//  {
-//    // Draw one item (if one item is selected)
-//    if (item[0])
-//    {
-//      centerPoints[0] = drawArea_botR / 2;
-//
-//      // Translate the painter to the position where we want the item to be
-//      painter.translate( centerPoints[0] + centerOffset );
-//
-//      // Draw the item at position (0,0)
-//      item[0]->drawItem( &painter, frame, zoomFactor, playback->playing() );
-//
-//      // Paint the regular gird
-//      if (drawRegularGrid)
-//        paintRegularGrid(&painter, item[0]);
-//
-//      if (pixelPosInItem[0])
-//      {
-//        // If the zoom box is active, draw a rect around the pixel currently under the cursor
-//        frameHandler *vid = item[0]->getFrameHandler();
-//        if (vid)
-//        {
-//          painter.setPen( vid->isPixelDark(zoomBoxPixelUnderCursor[0]) ? Qt::white : Qt::black );
-//          painter.drawRect( zoomPixelRect[0] );
-//        }
-//      }
-//
-//      // Do the inverse translation of the painter
-//      painter.resetTransform();
-//
-//      // Paint the zoom box for view 0
-//      paintZoomBox(0, &painter, xSplit, drawArea_botR, item[0], frame, zoomBoxPixelUnderCursor[0], pixelPosInItem[0], zoomFactor );
-//    }
-//  }
-//  
-//  if (splitting)
-//  {
-//    if (splittingLineStyle == TOP_BOTTOM_HANDLERS)
-//    {
-//      // Draw small handlers at the top and bottom
-//      QPainterPath triangle;
-//      triangle.moveTo( xSplit-10, 0 );
-//      triangle.lineTo( xSplit   , 10);
-//      triangle.lineTo( xSplit+10,  0);
-//      triangle.closeSubpath();
-//
-//      triangle.moveTo( xSplit-10, drawArea_botR.y() );
-//      triangle.lineTo( xSplit   , drawArea_botR.y() - 10);
-//      triangle.lineTo( xSplit+10, drawArea_botR.y() );
-//      triangle.closeSubpath();
-//
-//      painter.fillPath( triangle, Qt::white );
-//    }
-//    else
-//    {
-//      // Draw the splitting line at position xSplit. All pixels left of the line
-//      // belong to the left view, and all pixels on the right belong to the right one.
-//      QLine line(xSplit, 0, xSplit, drawArea_botR.y());
-//      QPen splitterPen(Qt::white);
-//      //splitterPen.setStyle(Qt::DashLine);
-//      painter.setPen(splitterPen);
-//      painter.drawLine(line);
-//    }
-//  }
-//
-//  // Draw the zoom factor
-//  if (zoomFactor != 1.0)
-//  {
-//    QString zoomString = QString("x%1").arg(zoomFactor);
-//    painter.setRenderHint(QPainter::TextAntialiasing);
-//    painter.setRenderHint(QPainter::Antialiasing);
-//    painter.setPen(QColor(Qt::black));
-//    painter.setFont(zoomFactorFont);
-//    painter.drawText(zoomFactorFontPos, zoomString);
-//  }
-//}
+void splitViewWidget::paintGL()
+{
+  DEBUG_SPLITVIEW("paintGL");
+  
+  glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);
+    
+  if (!playlist)
+    // The playlist was not initialized yet. Nothing to draw (yet)
+    return;
+
+  QPainter painter(this);
+
+  // Get the full size of the area that we can draw on (from the paint device base)
+  QPoint drawArea_botR(width(), height());
+  
+  if (isViewFrozen)
+  {
+    // Just draw the pixmap of the frozen view in the center of the current widget
+    int x = (drawArea_botR.x() - frozenViewImage.size().width()) / 2;
+    int y = (drawArea_botR.y() - frozenViewImage.size().height()) / 2;
+    painter.drawPixmap(x, y, frozenViewImage);
+    return;
+  }
+  
+  // Get the current frame to draw
+  int frame = playback->getCurrentFrame();
+
+  // Get the playlist item(s) to draw
+  playlistItem *item[2];
+  playlist->getSelectedItems(item[0], item[1]);
+  bool anyItemsSelected = item[0] != NULL || item[1] != NULL;
+
+  // The x position of the split (if splitting)
+  int xSplit = int(drawArea_botR.x() * splittingPoint);
+
+  // First determine the center points per of each view
+  QPoint centerPoints[2];
+  if (viewMode == COMPARISON || !splitting)
+  {
+    // For comparison mode, both items have the same center point, in the middle of the view widget
+    // This is equal to the scenario of not splitting
+    centerPoints[0] = drawArea_botR / 2;
+    centerPoints[1] = centerPoints[0];
+  }
+  else
+  {
+    // For side by side mode, the center points are centered in each individual split view 
+    int y = drawArea_botR.y() / 2;
+    centerPoints[0] = QPoint( xSplit / 2, y );
+    centerPoints[1] = QPoint( xSplit + (drawArea_botR.x() - xSplit) / 2, y );
+  }
+
+  // For the zoom box, calculate the pixel position under the cursor for each view. The following
+  // things are calculated in this function:
+  bool    pixelPosInItem[2] = {false, false};  //< Is the pixel position under the curser within the item?
+  QRect   zoomPixelRect[2];                    //< A rect around the pixel that is under the cursor
+  if (anyItemsSelected && drawZoomBox)
+  {
+    // We now have the pixel difference value for the item under the cursor. 
+    // We now draw one zoom box per view
+    int viewNum = (splitting && item[1]) ? 2 : 1;
+    for (int view=0; view<viewNum; view++)
+    {
+      // Get the size of the item
+      double itemSize[2];
+      itemSize[0] = item[view]->getSize().width();
+      itemSize[1] = item[view]->getSize().height();
+            
+      // Is the pixel under the cursor within the item?
+      pixelPosInItem[view] = (zoomBoxPixelUnderCursor[view].x() >= 0 && zoomBoxPixelUnderCursor[view].x() < itemSize[0]) &&
+                             (zoomBoxPixelUnderCursor[view].y() >= 0 && zoomBoxPixelUnderCursor[view].y() < itemSize[1]);
+
+      // Mark the pixel under the cursor with a rect around it.
+      if (pixelPosInItem[view])
+      {
+        int pixelPoint[2];
+        pixelPoint[0] = -((itemSize[0] / 2 - zoomBoxPixelUnderCursor[view].x()) * zoomFactor);
+        pixelPoint[1] = -((itemSize[1] / 2 - zoomBoxPixelUnderCursor[view].y()) * zoomFactor);
+        zoomPixelRect[view] = QRect(pixelPoint[0], pixelPoint[1], zoomFactor, zoomFactor);
+      }
+    }
+  }
+
+  // Calculate the modelViewProjectionMatrix
+  QMatrix4x4 modelMatrix;
+  modelMatrix.rotate( -clip(centerOffset.x() / 4, -180, 180) , 0, 1, 0 );
+  modelMatrix.rotate( -clip(centerOffset.y() / 4, -90, 90) , 1, 0, 0 );
+  modelMatrix.scale(10, 10, 10);
+  QMatrix4x4 modelViewProjectionMatrix = projectionMatrix * viewMatrix * modelMatrix;
+
+  if (splitting)
+  {
+    // Draw two items (or less, if less items are selected)
+    if (item[0])
+    {
+      // Set clipping to the left region
+      QRegion clip = QRegion(0, 0, xSplit, drawArea_botR.y());
+      painter.setClipRegion( clip );
+
+      // Translate the painter to the position where we want the item to be
+      painter.translate( centerPoints[0] + centerOffset );
+
+      // Draw the item at position (0,0)
+      item[0]->drawItem( &painter, frame, zoomFactor, playback->playing(), modelViewProjectionMatrix );
+
+      // Paint the regular gird
+      if (drawRegularGrid)
+        paintRegularGrid(&painter, item[0]);
+
+      if (pixelPosInItem[0])
+      {
+        // If the zoom box is active, draw a rect around the pixel currently under the cursor
+        frameHandler *vid = item[0]->getFrameHandler();
+        if (vid)
+        {
+          painter.setPen( vid->isPixelDark(zoomBoxPixelUnderCursor[0]) ? Qt::white : Qt::black );
+          painter.drawRect( zoomPixelRect[0] );
+        }
+      }
+
+      // Do the inverse translation of the painter
+      painter.resetTransform();
+
+      // Paint the zoom box for view 0
+      paintZoomBox(0, &painter, xSplit, drawArea_botR, item[0], frame, zoomBoxPixelUnderCursor[0], pixelPosInItem[0], zoomFactor );
+    }
+    if (item[1])
+    {
+      // Set clipping to the right region
+      QRegion clip = QRegion(xSplit, 0, drawArea_botR.x() - xSplit, drawArea_botR.y());
+      painter.setClipRegion( clip );
+
+      // Translate the painter to the position where we want the item to be
+      painter.translate( centerPoints[1] + centerOffset );
+
+      // Draw the item at position (0,0)
+      item[1]->drawItem( &painter, frame, zoomFactor, playback->playing(), modelViewProjectionMatrix );
+
+      // Paint the regular gird
+      if (drawRegularGrid)
+        paintRegularGrid(&painter, item[1]);
+
+      if (pixelPosInItem[1])
+      {
+        // If the zoom box is active, draw a rect around the pixel currently under the cursor
+        frameHandler *vid = item[1]->getFrameHandler();
+        if (vid)
+        {
+          painter.setPen( vid->isPixelDark(zoomBoxPixelUnderCursor[1]) ? Qt::white : Qt::black );
+          painter.drawRect( zoomPixelRect[1] );
+        }
+      }
+
+      // Do the inverse translation of the painter
+      painter.resetTransform();
+
+      // Paint the zoom box for view 0
+      paintZoomBox(1, &painter, xSplit, drawArea_botR, item[1], frame, zoomBoxPixelUnderCursor[1], pixelPosInItem[1], zoomFactor );
+    }
+
+    // Disable clipping
+    painter.setClipping( false );
+  }
+  else // (!splitting)
+  {
+    // Draw one item (if one item is selected)
+    if (item[0])
+    {
+      centerPoints[0] = drawArea_botR / 2;
+
+      // Translate the painter to the position where we want the item to be
+      painter.translate( centerPoints[0] + centerOffset );
+
+      // Draw the item at position (0,0)
+      item[0]->drawItem( &painter, frame, zoomFactor, playback->playing(), modelViewProjectionMatrix );
+
+      // Paint the regular gird
+      if (drawRegularGrid)
+        paintRegularGrid(&painter, item[0]);
+
+      if (pixelPosInItem[0])
+      {
+        // If the zoom box is active, draw a rect around the pixel currently under the cursor
+        frameHandler *vid = item[0]->getFrameHandler();
+        if (vid)
+        {
+          painter.setPen( vid->isPixelDark(zoomBoxPixelUnderCursor[0]) ? Qt::white : Qt::black );
+          painter.drawRect( zoomPixelRect[0] );
+        }
+      }
+
+      // Do the inverse translation of the painter
+      painter.resetTransform();
+
+      // Paint the zoom box for view 0
+      paintZoomBox(0, &painter, xSplit, drawArea_botR, item[0], frame, zoomBoxPixelUnderCursor[0], pixelPosInItem[0], zoomFactor );
+    }
+  }
+  
+  if (splitting)
+  {
+    if (splittingLineStyle == TOP_BOTTOM_HANDLERS)
+    {
+      // Draw small handlers at the top and bottom
+      QPainterPath triangle;
+      triangle.moveTo( xSplit-10, 0 );
+      triangle.lineTo( xSplit   , 10);
+      triangle.lineTo( xSplit+10,  0);
+      triangle.closeSubpath();
+
+      triangle.moveTo( xSplit-10, drawArea_botR.y() );
+      triangle.lineTo( xSplit   , drawArea_botR.y() - 10);
+      triangle.lineTo( xSplit+10, drawArea_botR.y() );
+      triangle.closeSubpath();
+
+      painter.fillPath( triangle, Qt::white );
+    }
+    else
+    {
+      // Draw the splitting line at position xSplit. All pixels left of the line
+      // belong to the left view, and all pixels on the right belong to the right one.
+      QLine line(xSplit, 0, xSplit, drawArea_botR.y());
+      QPen splitterPen(Qt::white);
+      //splitterPen.setStyle(Qt::DashLine);
+      painter.setPen(splitterPen);
+      painter.drawLine(line);
+    }
+  }
+
+  // Draw the zoom factor
+  if (zoomFactor != 1.0)
+  {
+    QString zoomString = QString("x%1").arg(zoomFactor);
+    painter.setRenderHint(QPainter::TextAntialiasing);
+    painter.setRenderHint(QPainter::Antialiasing);
+    painter.setPen(QColor(Qt::black));
+    painter.setFont(zoomFactorFont);
+    painter.drawText(zoomFactorFontPos, zoomString);
+  }
+}
 
 void splitViewWidget::updatePixelPositions()
 {
@@ -495,8 +494,15 @@ void splitViewWidget::paintZoomBox(int view, QPainter *painter, int xSplit, QPoi
                                               item->getSize().height() / 2 - pixelPos.y() - 0.5 );
     painter->translate( itemZoomBoxTranslation * zoomBoxFactor );
 
+    // Calculate the modelViewProjectionMatrix
+    QMatrix4x4 modelMatrix;
+    modelMatrix.rotate( -clip(centerOffset.x() / 4, -180, 180) , 0, 1, 0 );
+    modelMatrix.rotate( -clip(centerOffset.y() / 4, -90, 90) , 1, 0, 0 );
+    modelMatrix.scale(10, 10, 10);
+    QMatrix4x4 modelViewProjectionMatrix = projectionMatrix * viewMatrix * modelMatrix;
+
     // Draw the item again, but this time with a high zoom factor into the clipped region
-    item->drawItem( painter, frame, zoomBoxFactor, playback->playing() );
+    item->drawItem( painter, frame, zoomBoxFactor, playback->playing(), modelViewProjectionMatrix );
 
     // Reset transform and reset clipping to the previous clip region (if there was one)
     painter->resetTransform();
@@ -1177,20 +1183,12 @@ void splitViewWidget::initializeGL()
   glEnable(GL_POLYGON_OFFSET_LINE);
   glPolygonOffset(-0.03125f, -0.03125f);
 
-  initSkyBox();
-}
-
-void splitViewWidget::paintGL()
-{
-  qDebug() << "paintGL";
-
-  glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);
-  renderSkyBox(viewMatrix, projectionMatrix);
+  //initSkyBox();
 }
 
 void splitViewWidget::resizeGL(int width, int height)
 {
-  qDebug() << "resizeGL";
+  DEBUG_SPLITVIEW("resizeGL");
 
   glViewport(0, 0, width, height);
 
@@ -1198,169 +1196,4 @@ void splitViewWidget::resizeGL(int width, int height)
   projectionMatrix.perspective(60.0, float(width)/float(height), 0.1f, 20.0f);
 
   viewMatrix.setToIdentity();
-}
-
-void splitViewWidget::timerEvent(QTimerEvent * event)
-{
-  matrix.rotate(-1, 0, 1, 0);
-  update();
-}
-
-
-void splitViewWidget::initSkyBox()
-{
-    // Load all texture images
-    const QImage posx = QImage("C:/Qt/Examples/Qt-5.5/opengl/textures/images/side1.png").mirrored();
-    const QImage posy = QImage("C:/Qt/Examples/Qt-5.5/opengl/textures/images/side2.png").mirrored();
-    const QImage posz = QImage("C:/Qt/Examples/Qt-5.5/opengl/textures/images/side3.png").mirrored();
-    const QImage negx = QImage("C:/Qt/Examples/Qt-5.5/opengl/textures/images/side4.png").mirrored();
-    const QImage negy = QImage("C:/Qt/Examples/Qt-5.5/opengl/textures/images/side5.png").mirrored();
-    const QImage negz = QImage("C:/Qt/Examples/Qt-5.5/opengl/textures/images/side6.png").mirrored();
-
-    // Load images as independent texture objects
-    textures[0] = new QOpenGLTexture(posx);
-    textures[1] = new QOpenGLTexture(posy);
-    textures[2] = new QOpenGLTexture(posz);
-    textures[3] = new QOpenGLTexture(negx);
-    textures[4] = new QOpenGLTexture(negy);
-    textures[5] = new QOpenGLTexture(negz);
-    for(int i=0; i<6; i++)
-    {
-        textures[i]->setWrapMode(QOpenGLTexture::ClampToEdge);
-        textures[i]->setMinificationFilter(QOpenGLTexture::LinearMipMapLinear);
-        textures[i]->setMagnificationFilter(QOpenGLTexture::Linear);
-    }
-
-    // Construct a template square of size 2x2
-    const QVector3D p1(-1, 1, 0); // top-left
-    const QVector3D p2(-1, -1, 0); // bottom-left
-    const QVector3D p3(1, -1, 0); // bottom-right
-    const QVector3D p4(1, 1, 0); // top-right
-
-    // Array for storing geometry of the cube
-    QVector<QVector3D> geometry;
-    geometry.reserve(24);
-
-    // Transform p1 ... p4 for posx
-    QMatrix4x4 mat;
-    mat.translate(1, 0, 0);
-    mat.rotate(-90, 0, 1, 0);
-    geometry << mat.map(p1) << mat.map(p2)
-             << mat.map(p3) << mat.map(p4);
-
-    // Transform p1 ... p4 for posy
-    mat.setToIdentity();
-    mat.translate(0, 1, 0);
-    mat.rotate(90, 1, 0, 0);
-    geometry << mat.map(p1) << mat.map(p2)
-             << mat.map(p3) << mat.map(p4);
-
-    // Transform p2 ... p4 for posz
-    mat.setToIdentity();
-    mat.translate(0, 0, -1);
-    geometry << mat.map(p1) << mat.map(p2)
-             << mat.map(p3) << mat.map(p4);
-
-    // Transform p2 ... p4 for negx
-    mat.setToIdentity();
-    mat.translate(-1, 0, 0);
-    mat.rotate(90, 0, 1, 0);
-    geometry << mat.map(p1) << mat.map(p2)
-             << mat.map(p3) << mat.map(p4);
-
-    // Transform p2 ... p4 for negy
-    mat.setToIdentity();
-    mat.translate(0, -1, 0);
-    mat.rotate(-90, 1, 0, 0);
-    geometry << mat.map(p1) << mat.map(p2)
-             << mat.map(p3) << mat.map(p4);
-
-    // Transform p2 ... p4 for negz
-    mat.setToIdentity();
-    mat.translate(0, 0, 1);
-    mat.rotate(180, 0, 1, 0);
-    geometry << mat.map(p1) << mat.map(p2)
-             << mat.map(p3) << mat.map(p4);
-
-    // Texture coordinates
-    QVector<QVector2D> texCoords;
-    texCoords.reserve(24);
-    for(int i=0; i<6; i++)
-    {
-        texCoords << QVector2D(0, 1)
-                  << QVector2D(0, 0)
-                  << QVector2D(1, 0)
-                  << QVector2D(1, 1);
-    }
-
-    // Triangles
-    QVector<uint> triangles;
-    triangles.reserve(36);
-    for(int i=0; i<6; i++)
-    {
-        const int base = i*4;
-        triangles << base << base+1 << base+2;
-        triangles << base << base+2 << base+3;
-    }
-
-    // Store the arrays in buffers
-    vertexBuffer = new QOpenGLBuffer(QOpenGLBuffer::VertexBuffer);
-    vertexBuffer->create();
-    vertexBuffer->bind();
-    vertexBuffer->allocate( geometry.size()*sizeof(QVector3D) +
-                            texCoords.size()*sizeof(QVector2D) );
-    vertexBuffer->write(0, (const void *)geometry.constData(),
-                        geometry.size()*sizeof(QVector3D) );
-    vertexBuffer->write(geometry.size()*sizeof(QVector3D),
-                        (const void *)texCoords.constData(),
-                        texCoords.size()*sizeof(QVector2D) );
-    vertexBuffer->release();
-
-    indexBuffer = new QOpenGLBuffer(QOpenGLBuffer::IndexBuffer);
-    indexBuffer->create();
-    indexBuffer->bind();
-    indexBuffer->allocate((const void*)triangles.constData(),
-                          triangles.size()*sizeof(uint));
-    indexBuffer->release();
-
-    // Create shaders
-    shader = new QOpenGLShaderProgram;
-    shader->addShaderFromSourceFile(QOpenGLShader::Vertex, ":/skybox_vertex.glsl");
-    shader->addShaderFromSourceFile(QOpenGLShader::Fragment, ":/skybox_fragment.glsl");
-    shader->link();
-}
-
-void splitViewWidget::renderSkyBox(const QMatrix4x4 &viewMatrix, const QMatrix4x4 &projectionMatrix)
-{
-  shader->bind();
-  vertexBuffer->bind();
-  indexBuffer->bind();
-
-  shader->enableAttributeArray("qt_Vertex");
-  shader->setAttributeBuffer("qt_Vertex", GL_FLOAT, 0, 3, 0);
-
-  shader->enableAttributeArray("qt_MultiTexCoord0");
-  const int texCoordsOffset = 24 * sizeof(QVector3D);
-  shader->setAttributeBuffer("qt_MultiTexCoord0", GL_FLOAT, texCoordsOffset, 2, 0);
-
-  QMatrix4x4 modelMatrix = matrix;
-  modelMatrix.scale(10, 10, 10);
-
-  const QMatrix4x4 mvp = projectionMatrix * viewMatrix * modelMatrix;
-  shader->setUniformValue("qt_ModelViewProjectionMatrix", mvp);
-
-  for(int i=0; i<6; i++)
-  {
-    textures[i]->bind(i+1);
-    shader->setUniformValue("qt_Texture0", (i+1));
-
-    const uint triangleOffset = i*6*sizeof(uint);
-    glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, (void*)triangleOffset);
-
-    textures[i]->release(i+1);
-  }
-
-  indexBuffer->release();
-  vertexBuffer->release();
-  shader->release();
 }

@@ -21,14 +21,11 @@
 
 #include <QOpenGLWidget>
 #include <QOpenGLFunctions>
-#include <QOpenGLBuffer>
 #include <QDockWidget>
+#include <QMatrix4x4>
 #include <QMouseEvent>
 #include "ui_splitViewWidgetControls.h"
 #include "playlistItem.h"
-
-#include <QOpenGLShaderProgram>
-#include <QOpenGLTexture>
 
 enum ViewMode {SIDE_BY_SIDE, COMPARISON};
 
@@ -141,29 +138,9 @@ protected:
   void initializeGL() Q_DECL_OVERRIDE;
   void paintGL() Q_DECL_OVERRIDE;
   void resizeGL(int width, int height) Q_DECL_OVERRIDE;
-    QOpenGLShaderProgram *program;
-  QColor clearColor;
-  int xRot;
-  int yRot;
-  int zRot;
-  QOpenGLBuffer vbo;
-  void makeObject();
-  int timerId;
-  virtual void timerEvent(QTimerEvent * event) Q_DECL_OVERRIDE;
-
+  
   QMatrix4x4 projectionMatrix;
   QMatrix4x4 viewMatrix;
-
-  // The sky box
-  void initSkyBox();
-  void renderSkyBox(const QMatrix4x4 &viewMatrix, const QMatrix4x4 &projectionMatrix);
-  QOpenGLTexture *textures[6];
-  QOpenGLBuffer *vertexBuffer;
-  QOpenGLBuffer *indexBuffer;
-  QOpenGLShaderProgram *shader;
-  QMatrix4x4 matrix;
-
-
   // ----------------------
 
   // The controls for the splitView (splitView, drawGrid ...)

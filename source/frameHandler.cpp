@@ -20,6 +20,14 @@
 
 #include <QPainter>
 
+#define FRAMEHANDLER_DEBUG_OUTPUT 0
+#if FRAMEHANDLER_DEBUG_OUTPUT
+#include <QDebug>
+#define DEBUG_FRAMEHANDLER qDebug
+#else
+#define DEBUG_FRAMEHANDLER(fmt,...) ((void)0)
+#endif
+
 // ------ Initialize the static list of frame size presets ----------
 
 frameHandler::frameSizePresetList::frameSizePresetList()
@@ -78,11 +86,13 @@ QLayout *frameHandler::createFrameHandlerControls(QWidget *parentWidget, bool is
   int idx = presetFrameSizes.findSize( frameSize );
   ui->frameSizeComboBox->setCurrentIndex(idx);
   ui->frameSizeComboBox->setEnabled( !isSizeFixed );
+  ui->renderInSkyBox->setChecked(renderSkybox);
 
   // Connect all the change signals from the controls to "connectWidgetSignals()"
   connect(ui->widthSpinBox, SIGNAL(valueChanged(int)), this, SLOT(slotVideoControlChanged()));
   connect(ui->heightSpinBox, SIGNAL(valueChanged(int)), this, SLOT(slotVideoControlChanged()));
   connect(ui->frameSizeComboBox, SIGNAL(currentIndexChanged(int)), this, SLOT(slotVideoControlChanged()));
+  connect(ui->renderInSkyBox, SIGNAL(toggled(bool)), this, SLOT(slotSkyboxRenderingToggled(bool)));
 
   // The controls have been created and can be used now
   controlsCreated = true;
@@ -125,6 +135,7 @@ void frameHandler::setFrameSize(QSize newSize, bool emitSignal)
 void frameHandler::loadCurrentImageFromFile(QString filePath)
 {
   currentImage = QImage(filePath);
+  currentFrame = QPixmap::fromImage(currentImage);
   setFrameSize(currentImage.size());
 }
 
@@ -156,22 +167,34 @@ void frameHandler::slotVideoControlChanged()
   }
 }
 
-void frameHandler::drawFrame(QPainter *painter, int frameIdx, double zoomFactor)
+void frameHandler::drawFrame(QPainter *painter, int frameIdx, double zoomFactor, const QMatrix4x4 &modelViewProjectionMatrix)
 {
   Q_UNUSED(frameIdx);
 
-  // Create the video rect with the size of the sequence and center it.
-  QRect videoRect;
-  videoRect.setSize( frameSize * zoomFactor );
-  videoRect.moveCenter( QPoint(0,0) );
-
-  // Draw the current image ( currentFrame )
-  painter->drawImage( videoRect, currentImage );
-
-  if (zoomFactor >= 64)
+  if (renderSkybox)
   {
-    // Draw the pixel values onto the pixels
-    drawPixelValues(painter, videoRect, zoomFactor);
+    // Render the sky box
+    DEBUG_FRAMEHANDLER("frameHandler::drawFrame using skyBox");
+    painter->beginNativePainting();
+    skyBox.renderSkyBox(modelViewProjectionMatrix);
+    painter->endNativePainting();
+  }
+  else
+  {
+    DEBUG_FRAMEHANDLER("frameHandler::drawFrame 2D");
+    // Create the video rect with the size of the sequence and center it.
+    QRect videoRect;
+    videoRect.setSize( frameSize * zoomFactor );
+    videoRect.moveCenter( QPoint(0,0) );
+
+    // Draw the current image ( currentFrame )
+    painter->drawPixmap( videoRect, currentFrame );
+
+    if (zoomFactor >= 64)
+    {
+      // Draw the pixel values onto the pixels
+      drawPixelValues(painter, videoRect, zoomFactor);
+    }
   }
 }
 
@@ -348,4 +371,155 @@ ValuePairList frameHandler::getPixelValues(QPoint pixelPos)
   values.append( ValuePair("B", QString::number(qBlue(val))) );
 
   return values;
+}
+
+frameHandler::SkyBox::SkyBox()
+{
+  initializeOpenGLFunctions();
+
+  // Load all texture images
+  const QImage posx = QImage("C:/Qt/Examples/Qt-5.5/opengl/textures/images/side1.png").mirrored();
+  const QImage posy = QImage("C:/Qt/Examples/Qt-5.5/opengl/textures/images/side2.png").mirrored();
+  const QImage posz = QImage("C:/Qt/Examples/Qt-5.5/opengl/textures/images/side3.png").mirrored();
+  const QImage negx = QImage("C:/Qt/Examples/Qt-5.5/opengl/textures/images/side4.png").mirrored();
+  const QImage negy = QImage("C:/Qt/Examples/Qt-5.5/opengl/textures/images/side5.png").mirrored();
+  const QImage negz = QImage("C:/Qt/Examples/Qt-5.5/opengl/textures/images/side6.png").mirrored();
+
+  // Load images as independent texture objects
+  textures[0] = new QOpenGLTexture(posx);
+  textures[1] = new QOpenGLTexture(posy);
+  textures[2] = new QOpenGLTexture(posz);
+  textures[3] = new QOpenGLTexture(negx);
+  textures[4] = new QOpenGLTexture(negy);
+  textures[5] = new QOpenGLTexture(negz);
+  for(int i=0; i<6; i++)
+  {
+    textures[i]->setWrapMode(QOpenGLTexture::ClampToEdge);
+    textures[i]->setMinificationFilter(QOpenGLTexture::LinearMipMapLinear);
+    textures[i]->setMagnificationFilter(QOpenGLTexture::Linear);
+  }
+
+  // Construct a template square of size 2x2
+  const QVector3D p1(-1, 1, 0); // top-left
+  const QVector3D p2(-1, -1, 0); // bottom-left
+  const QVector3D p3(1, -1, 0); // bottom-right
+  const QVector3D p4(1, 1, 0); // top-right
+
+  // Array for storing geometry of the cube
+  QVector<QVector3D> geometry;
+  geometry.reserve(24);
+
+  // Transform p1 ... p4 for posx
+  QMatrix4x4 mat;
+  mat.translate(1, 0, 0);
+  mat.rotate(-90, 0, 1, 0);
+  geometry << mat.map(p1) << mat.map(p2) << mat.map(p3) << mat.map(p4);
+
+  // Transform p1 ... p4 for posy
+  mat.setToIdentity();
+  mat.translate(0, 1, 0);
+  mat.rotate(90, 1, 0, 0);
+  geometry << mat.map(p1) << mat.map(p2) << mat.map(p3) << mat.map(p4);
+
+  // Transform p2 ... p4 for posz
+  mat.setToIdentity();
+  mat.translate(0, 0, -1);
+  geometry << mat.map(p1) << mat.map(p2) << mat.map(p3) << mat.map(p4);
+
+  // Transform p2 ... p4 for negx
+  mat.setToIdentity();
+  mat.translate(-1, 0, 0);
+  mat.rotate(90, 0, 1, 0);
+  geometry << mat.map(p1) << mat.map(p2) << mat.map(p3) << mat.map(p4);
+
+  // Transform p2 ... p4 for negy
+  mat.setToIdentity();
+  mat.translate(0, -1, 0);
+  mat.rotate(-90, 1, 0, 0);
+  geometry << mat.map(p1) << mat.map(p2) << mat.map(p3) << mat.map(p4);
+
+  // Transform p2 ... p4 for negz
+  mat.setToIdentity();
+  mat.translate(0, 0, 1);
+  mat.rotate(180, 0, 1, 0);
+  geometry << mat.map(p1) << mat.map(p2) << mat.map(p3) << mat.map(p4);
+
+  // Texture coordinates
+  QVector<QVector2D> texCoords;
+  texCoords.reserve(24);
+  for(int i=0; i<6; i++)
+    texCoords << QVector2D(0, 1) << QVector2D(0, 0) << QVector2D(1, 0) << QVector2D(1, 1);
+
+  // Triangles
+  QVector<uint> triangles;
+  triangles.reserve(36);
+  for(int i=0; i<6; i++)
+  {
+    const int base = i*4;
+    triangles << base << base+1 << base+2;
+    triangles << base << base+2 << base+3;
+  }
+
+  // Store the arrays in buffers
+  vertexBuffer = new QOpenGLBuffer(QOpenGLBuffer::VertexBuffer);
+  vertexBuffer->create();
+  vertexBuffer->bind();
+  vertexBuffer->allocate( geometry.size()*sizeof(QVector3D) + texCoords.size()*sizeof(QVector2D) );
+  vertexBuffer->write(0, (const void *)geometry.constData(), geometry.size()*sizeof(QVector3D) );
+  vertexBuffer->write(geometry.size()*sizeof(QVector3D), (const void *)texCoords.constData(), texCoords.size()*sizeof(QVector2D) );
+  vertexBuffer->release();
+
+  indexBuffer = new QOpenGLBuffer(QOpenGLBuffer::IndexBuffer);
+  indexBuffer->create();
+  indexBuffer->bind();
+  indexBuffer->allocate((const void*)triangles.constData(), triangles.size()*sizeof(uint));
+  indexBuffer->release();
+
+  // Create shaders
+  shader = new QOpenGLShaderProgram;
+  shader->addShaderFromSourceFile(QOpenGLShader::Vertex, ":/skybox_vertex.glsl");
+  shader->addShaderFromSourceFile(QOpenGLShader::Fragment, ":/skybox_fragment.glsl");
+  shader->link();
+}
+
+
+void frameHandler::SkyBox::renderSkyBox(const QMatrix4x4 &modelViewProjectionMatrix)
+{
+  shader->bind();
+  vertexBuffer->bind();
+  indexBuffer->bind();
+
+  shader->enableAttributeArray("qt_Vertex");
+  shader->setAttributeBuffer("qt_Vertex", GL_FLOAT, 0, 3, 0);
+
+  shader->enableAttributeArray("qt_MultiTexCoord0");
+  const int texCoordsOffset = 24 * sizeof(QVector3D);
+  shader->setAttributeBuffer("qt_MultiTexCoord0", GL_FLOAT, texCoordsOffset, 2, 0);
+
+  QMatrix4x4 modelMatrix = matrix;
+  modelMatrix.scale(10, 10, 10);
+
+  shader->setUniformValue("qt_ModelViewProjectionMatrix", modelViewProjectionMatrix);
+
+  for(int i=0; i<6; i++)
+  {
+    textures[i]->bind(i+1);
+    shader->setUniformValue("qt_Texture0", (i+1));
+
+    const uint triangleOffset = i*6*sizeof(uint);
+    glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, (void*)triangleOffset);
+
+    textures[i]->release(i+1);
+  }
+
+  indexBuffer->release();
+  vertexBuffer->release();
+  shader->release();
+}
+
+void frameHandler::slotSkyboxRenderingToggled(bool newValue) 
+{ 
+  DEBUG_FRAMEHANDLER("frameHandler::slotSkyboxRenderingToggled %d", newValue);
+  renderSkybox = newValue; 
+  emit signalHandlerChanged(true, false); 
 }

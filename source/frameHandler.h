@@ -24,6 +24,11 @@
 
 #include "ui_frameHandler.h"
 
+#include <QOpenGLFunctions>
+#include <QOpenGLShaderProgram>
+#include <QOpenGLTexture>
+#include <QOpenGLBuffer>
+
 #include <assert.h>
 
 /* TODO
@@ -43,7 +48,7 @@ public:
   QSize getFrameSize() { return frameSize; }
   
   // Draw the (current) frame with the given zoom factor
-  virtual void drawFrame(QPainter *painter, int frameIdx, double zoomFactor);
+  virtual void drawFrame(QPainter *painter, int frameIdx, double zoomFactor, const QMatrix4x4 &modelViewProjectionMatrix);
 
   // Set the values and update the controls. Only emit an event if emitSignal is set.
   virtual void setFrameSize(QSize size, bool emitSignal = false);
@@ -90,12 +95,29 @@ signals:
 
 protected:
 
-  QImage currentImage;
-  QSize  frameSize;
+  QPixmap currentFrame;
+  QImage  currentImage;
+  QSize   frameSize;
 
   // Get the pixel value from currentImage. Make sure that currentImage is the correct image.
   virtual QRgb getPixelVal(QPoint pixelPos) { return currentImage.pixel(pixelPos); }
   virtual QRgb getPixelVal(int x, int y)    { return currentImage.pixel(x, y);     }
+
+  // OpenGL drawing
+  class SkyBox : protected QOpenGLFunctions
+  {
+  public:
+    SkyBox();
+    void renderSkyBox(const QMatrix4x4 &modelViewProjectionMatrix);
+
+    QOpenGLTexture *textures[6];
+    QOpenGLBuffer *vertexBuffer;
+    QOpenGLBuffer *indexBuffer;
+    QOpenGLShaderProgram *shader;
+    QMatrix4x4 matrix;
+  };
+  SkyBox skyBox;
+  bool renderSkybox;
     
 private:
 
@@ -131,6 +153,8 @@ protected slots:
 
   // All the valueChanged() signals from the controls are connected here.
   virtual void slotVideoControlChanged();
+
+  void slotSkyboxRenderingToggled(bool newValue);
 };
 
 #endif // FRAMEHANDLER_H

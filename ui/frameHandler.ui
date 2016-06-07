@@ -7,21 +7,25 @@
     <x>0</x>
     <y>0</y>
     <width>169</width>
-    <height>64</height>
+    <height>87</height>
    </rect>
   </property>
   <property name="windowTitle">
    <string>Form</string>
   </property>
-  <layout class="QGridLayout" name="frameHandlerLayout" rowstretch="0,0,0,0" columnstretch="0,1,0,1">
-   <item row="3" column="2" colspan="2">
-    <widget class="QComboBox" name="frameSizeComboBox"/>
-   </item>
-   <item row="1" column="1">
-    <widget class="QSpinBox" name="widthSpinBox"/>
+  <layout class="QGridLayout" name="frameHandlerLayout" rowstretch="0,0,0,0,0" columnstretch="0,1,0,1">
+   <item row="3" column="0" colspan="2">
+    <widget class="QLabel" name="label">
+     <property name="text">
+      <string>Frame Size</string>
+     </property>
+    </widget>
    </item>
    <item row="1" column="3">
     <widget class="QSpinBox" name="heightSpinBox"/>
+   </item>
+   <item row="1" column="1">
+    <widget class="QSpinBox" name="widthSpinBox"/>
    </item>
    <item row="1" column="0">
     <widget class="QLabel" name="label_2">
@@ -30,17 +34,20 @@
      </property>
     </widget>
    </item>
-   <item row="3" column="0" colspan="2">
-    <widget class="QLabel" name="label">
-     <property name="text">
-      <string>Frame Size</string>
-     </property>
-    </widget>
-   </item>
    <item row="1" column="2">
     <widget class="QLabel" name="label_3">
      <property name="text">
       <string>Height</string>
+     </property>
+    </widget>
+   </item>
+   <item row="3" column="2" colspan="2">
+    <widget class="QComboBox" name="frameSizeComboBox"/>
+   </item>
+   <item row="4" column="0" colspan="4">
+    <widget class="QCheckBox" name="renderInSkyBox">
+     <property name="text">
+      <string>Render as SkyBox</string>
      </property>
     </widget>
    </item>

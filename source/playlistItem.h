@@ -24,6 +24,8 @@
 #include <QTreeWidgetItem>
 #include <QDomElement>
 #include <QDir>
+#include <QMatrix4x4>
+
 #include <assert.h>
 
 #include "fileInfoWidget.h"
@@ -123,7 +125,7 @@ public:
   // item is not indexed by frame, the parameter frameIdx is ignored. If playback is set, the item might change it's drawing behavior. For
   // example, if playback is false, the item might show a "decoding" screen while a background process is decoding someghing. In case of 
   // playback the item should of course not show this screen.
-  virtual void drawItem(QPainter *painter, int frameIdx, double zoomFactor, bool playback) = 0;
+  virtual void drawItem(QPainter *painter, int frameIdx, double zoomFactor, bool playback, const QMatrix4x4 &modelViewProjectionMatrix) = 0;
   
   // Return the source values under the given pixel position.
   // For example a YUV source will provide Y,U and V values. An RGB source might provide RGB values,

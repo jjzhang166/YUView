@@ -64,7 +64,7 @@ void videoHandler::slotVideoControlChanged()
   emit signalHandlerChanged(true, true);
 }
 
-void videoHandler::drawFrame(QPainter *painter, int frameIdx, double zoomFactor)
+void videoHandler::drawFrame(QPainter *painter, int frameIdx, double zoomFactor, const QMatrix4x4 &modelViewProjectionMatrix)
 {
   // Check if the frameIdx changed and if we have to load a new frame
   if (frameIdx != currentFrameIdx)
@@ -108,19 +108,8 @@ void videoHandler::drawFrame(QPainter *painter, int frameIdx, double zoomFactor)
     }
   }
   
-  // Create the video rect with the size of the sequence and center it.
-  QRect videoRect;
-  videoRect.setSize( frameSize * zoomFactor );
-  videoRect.moveCenter( QPoint(0,0) );
-  
-  // Draw the current image ( currentFrame )
-  painter->drawPixmap( videoRect, currentFrame );
-
-  if (zoomFactor >= 64)
-  {
-    // Draw the pixel values onto the pixels
-    drawPixelValues(painter, videoRect, zoomFactor);
-  }
+  // The right frame is loaded. Let the frame handler handle drawing.
+  frameHandler::drawFrame(painter, frameIdx, zoomFactor, modelViewProjectionMatrix);
 }
 
 QPixmap videoHandler::calculateDifference(videoHandler *item2, int frame, QList<infoItem> &differenceInfoList, int amplificationFactor, bool markDifference)

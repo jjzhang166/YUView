@@ -246,12 +246,12 @@ playlistItemRawFile *playlistItemRawFile::newplaylistItemRawFile(QDomElementYUVi
   return newFile;
 }
 
-void playlistItemRawFile::drawItem(QPainter *painter, int frameIdx, double zoomFactor, bool playback)
+void playlistItemRawFile::drawItem(QPainter *painter, int frameIdx, double zoomFactor, bool playback, const QMatrix4x4 &modelViewProjectionMatrix)
 {
   Q_UNUSED(playback);
 
   if (frameIdx != -1)
-    video->drawFrame(painter, frameIdx, zoomFactor);
+    video->drawFrame(painter, frameIdx, zoomFactor, modelViewProjectionMatrix);
 }
 
 void playlistItemRawFile::loadRawData(int frameIdx)

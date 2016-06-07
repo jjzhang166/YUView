@@ -186,12 +186,12 @@ QList<infoItem> playlistItemHEVCFile::getInfoList()
   return infoList;
 }
 
-void playlistItemHEVCFile::drawItem(QPainter *painter, int frameIdx, double zoomFactor, bool playback)
+void playlistItemHEVCFile::drawItem(QPainter *painter, int frameIdx, double zoomFactor, bool playback, const QMatrix4x4 &modelViewProjectionMatrix)
 {
   playbackRunning = playback;
 
   if (frameIdx != -1)
-    yuvVideo.drawFrame(painter, frameIdx, zoomFactor);
+    yuvVideo.drawFrame(painter, frameIdx, zoomFactor, modelViewProjectionMatrix);
 
   // drawDecodingMessage will be true if in yuvVideo.drawFrame is was noticed that we need to decode a new frame
   // and that background process is now running.

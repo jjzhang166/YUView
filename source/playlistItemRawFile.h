@@ -66,7 +66,7 @@ public:
   virtual ValuePairListSets getPixelValues(QPoint pixelPos) Q_DECL_OVERRIDE;
 
   // Draw the item
-  virtual void drawItem(QPainter *painter, int frameIdx, double zoomFactor, bool playback) Q_DECL_OVERRIDE;
+  virtual void drawItem(QPainter *painter, int frameIdx, double zoomFactor, bool playback, const QMatrix4x4 &modelViewProjectionMatrix) Q_DECL_OVERRIDE;
 
   // -- Caching
   // Cache the given frame

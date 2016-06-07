@@ -98,9 +98,10 @@ QList<infoItem> playlistItemStatisticsFile::getInfoList()
   return infoList;
 }
 
-void playlistItemStatisticsFile::drawItem(QPainter *painter, int frameIdx, double zoomFactor, bool playback)
+void playlistItemStatisticsFile::drawItem(QPainter *painter, int frameIdx, double zoomFactor, bool playback, const QMatrix4x4 &modelViewProjectionMatrix)
 {
   Q_UNUSED(playback);
+  Q_UNUSED(modelViewProjectionMatrix);
 
   // Tell the statSource to draw the statistics
   statSource.paintStatistics(painter, frameIdx, zoomFactor);

@@ -49,7 +49,7 @@ public:
   videoHandler();
   virtual ~videoHandler() {};
     
-  virtual void drawFrame(QPainter *painter, int frameIdx, double zoomFactor) Q_DECL_OVERRIDE;
+  virtual void drawFrame(QPainter *painter, int frameIdx, double zoomFactor, const QMatrix4x4 &modelViewProjectionMatrix) Q_DECL_OVERRIDE;
 
   // --- Caching ----
   virtual int getNrFramesCached() { return pixmapCache.size(); }
@@ -81,8 +81,6 @@ public slots:
   virtual void removeFrameFromCache(int frameIdx);
 
 signals:
-  void signalHandlerChanged(bool redrawNeeded, bool cacheChanged);
-
   // Something in the handler was changed so that the number of frames might have changed.
   // For example the width/height or the YUV format was changed.
   void signalUpdateFrameLimits();
@@ -95,7 +93,6 @@ protected:
   // --- Drawing: We keep a buffer of the current frame as RGB image so wen don't have to ´convert
   // it from the source every time a draw event is triggered. But if currentFrameIdx is not identical to
   // the requested frame in the draw event, we will have to update currentFrame.
-  QPixmap    currentFrame;
   int        currentFrameIdx;
 
   // As the frameHandler implementations, we get the pixel values from currentImage. For a video, however, we

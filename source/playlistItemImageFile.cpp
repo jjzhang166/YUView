@@ -77,7 +77,7 @@ playlistItemImageFile *playlistItemImageFile::newplaylistItemImageFile(QDomEleme
   return newImage;
 }
 
-void playlistItemImageFile::drawItem(QPainter *painter, int frameIdx, double zoomFactor, bool playback)
+void playlistItemImageFile::drawItem(QPainter *painter, int frameIdx, double zoomFactor, bool playback, const QMatrix4x4 &modelViewProjectionMatrix)
 {
   Q_UNUSED(frameIdx);
   Q_UNUSED(playback);
@@ -103,7 +103,7 @@ void playlistItemImageFile::drawItem(QPainter *painter, int frameIdx, double zoo
     return;
   }
 
-  frame.drawFrame(painter, frameIdx, zoomFactor);
+  frame.drawFrame(painter, frameIdx, zoomFactor, modelViewProjectionMatrix);
 }
 
 void playlistItemImageFile::getSupportedFileExtensions(QStringList &allExtensions, QStringList &filters)

@@ -61,7 +61,7 @@ public:
   // Does the playlistItem provide statistics? If yes, the following functions can be
   // used to access it
 
-  virtual void drawItem(QPainter *painter, int frameIdx, double zoomFactor, bool playback) Q_DECL_OVERRIDE;
+  virtual void drawItem(QPainter *painter, int frameIdx, double zoomFactor, bool playback, const QMatrix4x4 &modelViewProjectionMatrix) Q_DECL_OVERRIDE;
 
   virtual indexRange getstartEndFrameLimits() Q_DECL_OVERRIDE { return indexRange(0, maxPOC); }
 
