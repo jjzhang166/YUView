@@ -20,7 +20,7 @@
 
 #include <QPainter>
 
-#define FRAMEHANDLER_DEBUG_OUTPUT 0
+#define FRAMEHANDLER_DEBUG_OUTPUT 1
 #if FRAMEHANDLER_DEBUG_OUTPUT
 #include <QDebug>
 #define DEBUG_FRAMEHANDLER qDebug
@@ -61,6 +61,7 @@ frameHandler::frameSizePresetList frameHandler::presetFrameSizes;
 frameHandler::frameHandler() : ui(new Ui::frameHandler)
 {
   controlsCreated = false;
+  renderSkybox = false;
 }
 
 frameHandler::~frameHandler()
@@ -134,8 +135,9 @@ void frameHandler::setFrameSize(QSize newSize, bool emitSignal)
 
 void frameHandler::loadCurrentImageFromFile(QString filePath)
 {
-  currentImage = QImage(filePath);
+  currentImage = QImage(filePath).convertToFormat(QImage::Format_RGB888);
   currentFrame = QPixmap::fromImage(currentImage);
+  
   setFrameSize(currentImage.size());
 }
 
@@ -176,6 +178,8 @@ void frameHandler::drawFrame(QPainter *painter, int frameIdx, double zoomFactor,
     // Render the sky box
     DEBUG_FRAMEHANDLER("frameHandler::drawFrame using skyBox");
     painter->beginNativePainting();
+    if (skyBox.textures[0] == NULL)
+      skyBox.loadTextureFromCubeMap(currentImage);
     skyBox.renderSkyBox(modelViewProjectionMatrix);
     painter->endNativePainting();
   }
@@ -189,7 +193,7 @@ void frameHandler::drawFrame(QPainter *painter, int frameIdx, double zoomFactor,
 
     // Draw the current image ( currentFrame )
     painter->drawPixmap( videoRect, currentFrame );
-
+    
     if (zoomFactor >= 64)
     {
       // Draw the pixel values onto the pixels
@@ -377,27 +381,8 @@ frameHandler::SkyBox::SkyBox()
 {
   initializeOpenGLFunctions();
 
-  // Load all texture images
-  const QImage posx = QImage("C:/Qt/Examples/Qt-5.5/opengl/textures/images/side1.png").mirrored();
-  const QImage posy = QImage("C:/Qt/Examples/Qt-5.5/opengl/textures/images/side2.png").mirrored();
-  const QImage posz = QImage("C:/Qt/Examples/Qt-5.5/opengl/textures/images/side3.png").mirrored();
-  const QImage negx = QImage("C:/Qt/Examples/Qt-5.5/opengl/textures/images/side4.png").mirrored();
-  const QImage negy = QImage("C:/Qt/Examples/Qt-5.5/opengl/textures/images/side5.png").mirrored();
-  const QImage negz = QImage("C:/Qt/Examples/Qt-5.5/opengl/textures/images/side6.png").mirrored();
-
-  // Load images as independent texture objects
-  textures[0] = new QOpenGLTexture(posx);
-  textures[1] = new QOpenGLTexture(posy);
-  textures[2] = new QOpenGLTexture(posz);
-  textures[3] = new QOpenGLTexture(negx);
-  textures[4] = new QOpenGLTexture(negy);
-  textures[5] = new QOpenGLTexture(negz);
-  for(int i=0; i<6; i++)
-  {
-    textures[i]->setWrapMode(QOpenGLTexture::ClampToEdge);
-    textures[i]->setMinificationFilter(QOpenGLTexture::LinearMipMapLinear);
-    textures[i]->setMagnificationFilter(QOpenGLTexture::Linear);
-  }
+  // This will indicate that no texture is loaded yet
+  textures[0] = NULL;
 
   // Construct a template square of size 2x2
   const QVector3D p1(-1, 1, 0); // top-left
@@ -482,9 +467,56 @@ frameHandler::SkyBox::SkyBox()
   shader->link();
 }
 
+frameHandler::SkyBox::~SkyBox()
+{
+  if (textures[0])
+  {
+    for (int i = 0; i < 6; i++)
+      delete textures[i];
+  }
+}
+
+void frameHandler::SkyBox::loadTextureFromCubeMap(QImage image)
+{
+  if (textures[0])
+  {
+    // delete the old texture
+    for (int i = 0; i < 6; i++)
+      delete textures[i];
+  }
+
+  int partWidth = image.size().width() / 4;
+  int partHeight = image.size().height() / 3;
+
+  // Load all texture images
+  const QImage posx = image.copy(2 * partWidth,     partHeight, partWidth, partHeight).mirrored();
+  const QImage posy = image.copy(    partWidth,              0, partWidth, partHeight).mirrored();
+  const QImage posz = image.copy(    partWidth,     partHeight, partWidth, partHeight).mirrored();
+  const QImage negx = image.copy(            0,     partHeight, partWidth, partHeight).mirrored();
+  const QImage negy = image.copy(    partWidth, 2 * partHeight, partWidth, partHeight).mirrored();
+  const QImage negz = image.copy(3 * partWidth,     partHeight, partWidth, partHeight).mirrored();
+
+  // Load images as independent texture objects
+  textures[0] = new QOpenGLTexture(posx);
+  textures[1] = new QOpenGLTexture(posy);
+  textures[2] = new QOpenGLTexture(posz);
+  textures[3] = new QOpenGLTexture(negx);
+  textures[4] = new QOpenGLTexture(negy);
+  textures[5] = new QOpenGLTexture(negz);
+  for(int i=0; i<6; i++)
+  {
+    textures[i]->setWrapMode(QOpenGLTexture::ClampToEdge);
+    textures[i]->setMinificationFilter(QOpenGLTexture::LinearMipMapLinear);
+    textures[i]->setMagnificationFilter(QOpenGLTexture::Linear);
+  }
+}
 
 void frameHandler::SkyBox::renderSkyBox(const QMatrix4x4 &modelViewProjectionMatrix)
 {
+  if (!textures[0])
+    // No texture loaded yet. Nothing to draw.
+    return;
+
   shader->bind();
   vertexBuffer->bind();
   indexBuffer->bind();

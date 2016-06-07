@@ -148,3 +148,34 @@ QList<infoItem> playlistItemImageFile::getInfoList()
 
   return infoList;
 }
+
+void playlistItemImageFile::createPropertiesWidget( )
+{
+  // Absolutely always only call this once
+  assert( propertiesWidget == NULL );
+
+  // Create a new widget and populate it with controls
+  propertiesWidget = new QWidget;
+  if (propertiesWidget->objectName().isEmpty())
+    propertiesWidget->setObjectName(QStringLiteral("playlistItemImageFile"));
+
+  // On the top level everything is layout vertically
+  QVBoxLayout *vAllLaout = new QVBoxLayout(propertiesWidget);
+
+  QFrame *line = new QFrame(propertiesWidget);
+  line->setObjectName(QStringLiteral("line"));
+  line->setFrameShape(QFrame::HLine);
+  line->setFrameShadow(QFrame::Sunken);
+  
+  // First add the parents controls (first video controls (width/height...) then videoHandler controls (format,...)
+  vAllLaout->addLayout( createStaticTimeController(propertiesWidget) );
+  vAllLaout->addWidget( line );
+  vAllLaout->addLayout( frame.createFrameHandlerControls(propertiesWidget, true) );
+  
+  // Insert a stretch at the bottom of the vertical global layout so that everything
+  // gets 'pushed' to the top
+  vAllLaout->insertStretch(3, 1);
+
+  // Set the layout and add widget
+  propertiesWidget->setLayout( vAllLaout );
+}

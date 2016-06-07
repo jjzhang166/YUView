@@ -108,8 +108,10 @@ protected:
   {
   public:
     SkyBox();
+    ~SkyBox();
     void renderSkyBox(const QMatrix4x4 &modelViewProjectionMatrix);
-
+    void loadTextureFromCubeMap(QImage image);
+    
     QOpenGLTexture *textures[6];
     QOpenGLBuffer *vertexBuffer;
     QOpenGLBuffer *indexBuffer;

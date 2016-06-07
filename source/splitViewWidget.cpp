@@ -79,10 +79,10 @@ splitViewWidget::splitViewWidget(QWidget *parent, bool separateView)
   // We want to have all mouse events (even move)
   setMouseTracking(true);
 
-  // Set multisampling to 4 samples
-  QSurfaceFormat format;
-  format.setSamples(4);
-  setFormat(format);
+  //// Set multisampling to 4 samples
+  //QSurfaceFormat format;
+  //format.setSamples(4);
+  //setFormat(format);
 }
 
 splitViewWidget::~splitViewWidget()
@@ -212,8 +212,8 @@ void splitViewWidget::paintGL()
 
   // Calculate the modelViewProjectionMatrix
   QMatrix4x4 modelMatrix;
-  modelMatrix.rotate( -clip(centerOffset.x() / 4, -180, 180) , 0, 1, 0 );
-  modelMatrix.rotate( -clip(centerOffset.y() / 4, -90, 90) , 1, 0, 0 );
+  modelMatrix.rotate( (float)(-clip(centerOffset.y() , -360, 360)) / 4 , 1, 0, 0 );
+  modelMatrix.rotate( (float)(-clip(centerOffset.x() , -720, 720)) / 4 , 0, 1, 0 );
   modelMatrix.scale(10, 10, 10);
   QMatrix4x4 modelViewProjectionMatrix = projectionMatrix * viewMatrix * modelMatrix;
 
@@ -496,8 +496,8 @@ void splitViewWidget::paintZoomBox(int view, QPainter *painter, int xSplit, QPoi
 
     // Calculate the modelViewProjectionMatrix
     QMatrix4x4 modelMatrix;
-    modelMatrix.rotate( -clip(centerOffset.x() / 4, -180, 180) , 0, 1, 0 );
     modelMatrix.rotate( -clip(centerOffset.y() / 4, -90, 90) , 1, 0, 0 );
+    modelMatrix.rotate( -clip(centerOffset.x() / 4, -180, 180) , 0, 1, 0 );
     modelMatrix.scale(10, 10, 10);
     QMatrix4x4 modelViewProjectionMatrix = projectionMatrix * viewMatrix * modelMatrix;
 

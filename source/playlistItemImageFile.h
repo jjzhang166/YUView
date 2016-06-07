@@ -65,6 +65,9 @@ public:
   
 private:
 
+  // Overload from playlistItem. Create a properties widget custom to the image file.
+  virtual void createPropertiesWidget() Q_DECL_OVERRIDE;
+
   // The file path of the source
   QString imagePath;
 
