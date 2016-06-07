@@ -19,7 +19,7 @@
 #ifndef SPLITVIEWWIDGET_H
 #define SPLITVIEWWIDGET_H
 
-#include <QGLWidget>
+#include <QOpenGLWidget>
 #include <QOpenGLFunctions>
 #include <QOpenGLBuffer>
 #include <QDockWidget>
@@ -51,7 +51,7 @@ enum ViewMode {SIDE_BY_SIDE, COMPARISON};
 class PlaylistTreeWidget;
 class PlaybackController;
 
-class splitViewWidget : public QGLWidget, protected QOpenGLFunctions
+class splitViewWidget : public QOpenGLWidget, protected QOpenGLFunctions
 {
   Q_OBJECT
 
@@ -141,8 +141,7 @@ protected:
   void initializeGL() Q_DECL_OVERRIDE;
   void paintGL() Q_DECL_OVERRIDE;
   void resizeGL(int width, int height) Q_DECL_OVERRIDE;
-  QOpenGLTexture *textures[6];
-  QOpenGLShaderProgram *program;
+    QOpenGLShaderProgram *program;
   QColor clearColor;
   int xRot;
   int yRot;
@@ -151,6 +150,20 @@ protected:
   void makeObject();
   int timerId;
   virtual void timerEvent(QTimerEvent * event) Q_DECL_OVERRIDE;
+
+  QMatrix4x4 projectionMatrix;
+  QMatrix4x4 viewMatrix;
+
+  // The sky box
+  void initSkyBox();
+  void renderSkyBox(const QMatrix4x4 &viewMatrix, const QMatrix4x4 &projectionMatrix);
+  QOpenGLTexture *textures[6];
+  QOpenGLBuffer *vertexBuffer;
+  QOpenGLBuffer *indexBuffer;
+  QOpenGLShaderProgram *shader;
+  QMatrix4x4 matrix;
+
+
   // ----------------------
 
   // The controls for the splitView (splitView, drawGrid ...)

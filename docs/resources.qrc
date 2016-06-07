@@ -1,5 +1,7 @@
 <RCC>
     <qresource prefix="/">
         <file alias="about.html">about.html</file>
+        <file>skybox_fragment.glsl</file>
+        <file>skybox_vertex.glsl</file>
     </qresource>
 </RCC>

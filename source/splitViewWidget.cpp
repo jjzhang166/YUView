@@ -30,7 +30,7 @@
 #include "videoHandler.h"
 
 splitViewWidget::splitViewWidget(QWidget *parent, bool separateView)
-  : QGLWidget(QGLFormat(QGL::SampleBuffers), parent)
+  : QOpenGLWidget(parent)
 {
   setFocusPolicy(Qt::NoFocus);
   isSeparateWidget = separateView;
@@ -77,17 +77,26 @@ splitViewWidget::splitViewWidget(QWidget *parent, bool separateView)
   yRot = 0;
   zRot = 0;
   program = NULL;
-  memset(textures, 0, sizeof(textures));
-  startTimer(10, Qt::PreciseTimer);
+  for (int i = 0; i < 6; i++)
+    textures[i] = NULL;
+  startTimer(50, Qt::PreciseTimer);
+
+  QSurfaceFormat format;
+  format.setSamples(4);
+  setFormat(format);
 }
 
 splitViewWidget::~splitViewWidget()
 {
   makeCurrent();
   vbo.destroy();
-  for (int i = 0; i < 6; ++i)
-      delete textures[i];
+  for (int i = 0; i < 6; i++)
+    if (textures[i])
+      textures[i]->destroy();
   delete program;
+  delete vertexBuffer;
+  delete indexBuffer;
+  delete shader;
   doneCurrent();
 }
 
@@ -1162,122 +1171,196 @@ void splitViewWidget::initializeGL()
 {
   initializeOpenGLFunctions();
 
-  makeObject();
-
+  glClearColor(0.25, 0.35, 0.45, 1);
   glEnable(GL_DEPTH_TEST);
-  glEnable(GL_CULL_FACE);
+  glDepthFunc(GL_LEQUAL);
+  glEnable(GL_POLYGON_OFFSET_LINE);
+  glPolygonOffset(-0.03125f, -0.03125f);
 
-#define PROGRAM_VERTEX_ATTRIBUTE 0
-#define PROGRAM_TEXCOORD_ATTRIBUTE 1
-
-  QOpenGLShader *vshader = new QOpenGLShader(QOpenGLShader::Vertex, this);
-  const char *vsrc =
-    "attribute highp vec4 vertex;\n"
-    "attribute mediump vec4 texCoord;\n"
-    "varying mediump vec4 texc;\n"
-    "uniform mediump mat4 matrix;\n"
-    "void main(void)\n"
-    "{\n"
-    "    gl_Position = matrix * vertex;\n"
-    "    texc = texCoord;\n"
-    "}\n";
-  vshader->compileSourceCode(vsrc);
-
-  QOpenGLShader *fshader = new QOpenGLShader(QOpenGLShader::Fragment, this);
-  const char *fsrc =
-    "uniform sampler2D texture;\n"
-    "varying mediump vec4 texc;\n"
-    "void main(void)\n"
-    "{\n"
-    "    gl_FragColor = texture2D(texture, texc.st);\n"
-    "}\n";
-  fshader->compileSourceCode(fsrc);
-
-  program = new QOpenGLShaderProgram;
-  program->addShader(vshader);
-  program->addShader(fshader);
-  program->bindAttributeLocation("vertex", PROGRAM_VERTEX_ATTRIBUTE);
-  program->bindAttributeLocation("texCoord", PROGRAM_TEXCOORD_ATTRIBUTE);
-  program->link();
-
-  program->bind();
-  program->setUniformValue("texture", 0);
+  initSkyBox();
 }
 
 void splitViewWidget::paintGL()
 {
   qDebug() << "paintGL";
 
-  glClearColor(clearColor.redF(), clearColor.greenF(), clearColor.blueF(), clearColor.alphaF());
-  glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-  QMatrix4x4 m;
-  m.ortho(-0.5f, +0.5f, +0.5f, -0.5f, 4.0f, 15.0f);
-  m.translate(0.0f, 0.0f, -10.0f);
-  m.rotate(xRot / 16.0f, 1.0f, 0.0f, 0.0f);
-  m.rotate(yRot / 16.0f, 0.0f, 1.0f, 0.0f);
-  m.rotate(zRot / 16.0f, 0.0f, 0.0f, 1.0f);
-
-  program->setUniformValue("matrix", m);
-  program->enableAttributeArray(PROGRAM_VERTEX_ATTRIBUTE);
-  program->enableAttributeArray(PROGRAM_TEXCOORD_ATTRIBUTE);
-  program->setAttributeBuffer(PROGRAM_VERTEX_ATTRIBUTE, GL_FLOAT, 0, 3, 5 * sizeof(GLfloat));
-  program->setAttributeBuffer(PROGRAM_TEXCOORD_ATTRIBUTE, GL_FLOAT, 3 * sizeof(GLfloat), 2, 5 * sizeof(GLfloat));
-
-  for (int i = 0; i < 6; ++i) 
-  {
-    textures[i]->bind();
-    glDrawArrays(GL_TRIANGLE_FAN, i * 4, 4);
-  }  
+  glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);
+  renderSkyBox(viewMatrix, projectionMatrix);
 }
 
 void splitViewWidget::resizeGL(int width, int height)
 {
   qDebug() << "resizeGL";
 
-  int side = qMin(width, height);
-  glViewport((width - side) / 2, (height - side) / 2, side, side);
-}
+  glViewport(0, 0, width, height);
 
-void splitViewWidget::makeObject()
-{
-  static const int coords[6][4][3] = 
-  {
-    { { +1, -1, -1 }, { -1, -1, -1 }, { -1, +1, -1 }, { +1, +1, -1 } },
-    { { +1, +1, -1 }, { -1, +1, -1 }, { -1, +1, +1 }, { +1, +1, +1 } },
-    { { +1, -1, +1 }, { +1, -1, -1 }, { +1, +1, -1 }, { +1, +1, +1 } },
-    { { -1, -1, -1 }, { -1, -1, +1 }, { -1, +1, +1 }, { -1, +1, -1 } },
-    { { +1, -1, +1 }, { -1, -1, +1 }, { -1, -1, -1 }, { +1, -1, -1 } },
-    { { -1, -1, +1 }, { +1, -1, +1 }, { +1, +1, +1 }, { -1, +1, +1 } }
-  };
+  projectionMatrix.setToIdentity();
+  projectionMatrix.perspective(60.0, float(width)/float(height), 0.1f, 20.0f);
 
-  for (int j = 0; j < 6; ++j)
-    textures[j] = new QOpenGLTexture(QImage(QString("C:/Qt/Examples/Qt-5.5/opengl/textures/images/side%1.png").arg(j + 1)).mirrored());
-
-  QVector<GLfloat> vertData;
-  for (int i = 0; i < 6; ++i) 
-  {
-    for (int j = 0; j < 4; ++j) 
-    {
-      // vertex position
-      vertData.append(0.2 * coords[i][j][0]);
-      vertData.append(0.2 * coords[i][j][1]);
-      vertData.append(0.2 * coords[i][j][2]);
-      // texture coordinate
-      vertData.append(j == 0 || j == 3);
-      vertData.append(j == 0 || j == 1);
-    }
-  }
-
-  vbo.create();
-  vbo.bind();
-  vbo.allocate(vertData.constData(), vertData.count() * sizeof(GLfloat));
+  viewMatrix.setToIdentity();
 }
 
 void splitViewWidget::timerEvent(QTimerEvent * event)
 {
-  xRot += +2 * 16;
-  yRot += +2 * 16;
-  zRot += -1 * 16;
+  matrix.rotate(-1, 0, 1, 0);
   update();
+}
+
+
+void splitViewWidget::initSkyBox()
+{
+    // Load all texture images
+    const QImage posx = QImage("C:/Qt/Examples/Qt-5.5/opengl/textures/images/side1.png").mirrored();
+    const QImage posy = QImage("C:/Qt/Examples/Qt-5.5/opengl/textures/images/side2.png").mirrored();
+    const QImage posz = QImage("C:/Qt/Examples/Qt-5.5/opengl/textures/images/side3.png").mirrored();
+    const QImage negx = QImage("C:/Qt/Examples/Qt-5.5/opengl/textures/images/side4.png").mirrored();
+    const QImage negy = QImage("C:/Qt/Examples/Qt-5.5/opengl/textures/images/side5.png").mirrored();
+    const QImage negz = QImage("C:/Qt/Examples/Qt-5.5/opengl/textures/images/side6.png").mirrored();
+
+    // Load images as independent texture objects
+    textures[0] = new QOpenGLTexture(posx);
+    textures[1] = new QOpenGLTexture(posy);
+    textures[2] = new QOpenGLTexture(posz);
+    textures[3] = new QOpenGLTexture(negx);
+    textures[4] = new QOpenGLTexture(negy);
+    textures[5] = new QOpenGLTexture(negz);
+    for(int i=0; i<6; i++)
+    {
+        textures[i]->setWrapMode(QOpenGLTexture::ClampToEdge);
+        textures[i]->setMinificationFilter(QOpenGLTexture::LinearMipMapLinear);
+        textures[i]->setMagnificationFilter(QOpenGLTexture::Linear);
+    }
+
+    // Construct a template square of size 2x2
+    const QVector3D p1(-1, 1, 0); // top-left
+    const QVector3D p2(-1, -1, 0); // bottom-left
+    const QVector3D p3(1, -1, 0); // bottom-right
+    const QVector3D p4(1, 1, 0); // top-right
+
+    // Array for storing geometry of the cube
+    QVector<QVector3D> geometry;
+    geometry.reserve(24);
+
+    // Transform p1 ... p4 for posx
+    QMatrix4x4 mat;
+    mat.translate(1, 0, 0);
+    mat.rotate(-90, 0, 1, 0);
+    geometry << mat.map(p1) << mat.map(p2)
+             << mat.map(p3) << mat.map(p4);
+
+    // Transform p1 ... p4 for posy
+    mat.setToIdentity();
+    mat.translate(0, 1, 0);
+    mat.rotate(90, 1, 0, 0);
+    geometry << mat.map(p1) << mat.map(p2)
+             << mat.map(p3) << mat.map(p4);
+
+    // Transform p2 ... p4 for posz
+    mat.setToIdentity();
+    mat.translate(0, 0, -1);
+    geometry << mat.map(p1) << mat.map(p2)
+             << mat.map(p3) << mat.map(p4);
+
+    // Transform p2 ... p4 for negx
+    mat.setToIdentity();
+    mat.translate(-1, 0, 0);
+    mat.rotate(90, 0, 1, 0);
+    geometry << mat.map(p1) << mat.map(p2)
+             << mat.map(p3) << mat.map(p4);
+
+    // Transform p2 ... p4 for negy
+    mat.setToIdentity();
+    mat.translate(0, -1, 0);
+    mat.rotate(-90, 1, 0, 0);
+    geometry << mat.map(p1) << mat.map(p2)
+             << mat.map(p3) << mat.map(p4);
+
+    // Transform p2 ... p4 for negz
+    mat.setToIdentity();
+    mat.translate(0, 0, 1);
+    mat.rotate(180, 0, 1, 0);
+    geometry << mat.map(p1) << mat.map(p2)
+             << mat.map(p3) << mat.map(p4);
+
+    // Texture coordinates
+    QVector<QVector2D> texCoords;
+    texCoords.reserve(24);
+    for(int i=0; i<6; i++)
+    {
+        texCoords << QVector2D(0, 1)
+                  << QVector2D(0, 0)
+                  << QVector2D(1, 0)
+                  << QVector2D(1, 1);
+    }
+
+    // Triangles
+    QVector<uint> triangles;
+    triangles.reserve(36);
+    for(int i=0; i<6; i++)
+    {
+        const int base = i*4;
+        triangles << base << base+1 << base+2;
+        triangles << base << base+2 << base+3;
+    }
+
+    // Store the arrays in buffers
+    vertexBuffer = new QOpenGLBuffer(QOpenGLBuffer::VertexBuffer);
+    vertexBuffer->create();
+    vertexBuffer->bind();
+    vertexBuffer->allocate( geometry.size()*sizeof(QVector3D) +
+                            texCoords.size()*sizeof(QVector2D) );
+    vertexBuffer->write(0, (const void *)geometry.constData(),
+                        geometry.size()*sizeof(QVector3D) );
+    vertexBuffer->write(geometry.size()*sizeof(QVector3D),
+                        (const void *)texCoords.constData(),
+                        texCoords.size()*sizeof(QVector2D) );
+    vertexBuffer->release();
+
+    indexBuffer = new QOpenGLBuffer(QOpenGLBuffer::IndexBuffer);
+    indexBuffer->create();
+    indexBuffer->bind();
+    indexBuffer->allocate((const void*)triangles.constData(),
+                          triangles.size()*sizeof(uint));
+    indexBuffer->release();
+
+    // Create shaders
+    shader = new QOpenGLShaderProgram;
+    shader->addShaderFromSourceFile(QOpenGLShader::Vertex, ":/skybox_vertex.glsl");
+    shader->addShaderFromSourceFile(QOpenGLShader::Fragment, ":/skybox_fragment.glsl");
+    shader->link();
+}
+
+void splitViewWidget::renderSkyBox(const QMatrix4x4 &viewMatrix, const QMatrix4x4 &projectionMatrix)
+{
+  shader->bind();
+  vertexBuffer->bind();
+  indexBuffer->bind();
+
+  shader->enableAttributeArray("qt_Vertex");
+  shader->setAttributeBuffer("qt_Vertex", GL_FLOAT, 0, 3, 0);
+
+  shader->enableAttributeArray("qt_MultiTexCoord0");
+  const int texCoordsOffset = 24 * sizeof(QVector3D);
+  shader->setAttributeBuffer("qt_MultiTexCoord0", GL_FLOAT, texCoordsOffset, 2, 0);
+
+  QMatrix4x4 modelMatrix = matrix;
+  modelMatrix.scale(10, 10, 10);
+
+  const QMatrix4x4 mvp = projectionMatrix * viewMatrix * modelMatrix;
+  shader->setUniformValue("qt_ModelViewProjectionMatrix", mvp);
+
+  for(int i=0; i<6; i++)
+  {
+    textures[i]->bind(i+1);
+    shader->setUniformValue("qt_Texture0", (i+1));
+
+    const uint triangleOffset = i*6*sizeof(uint);
+    glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, (void*)triangleOffset);
+
+    textures[i]->release(i+1);
+  }
+
+  indexBuffer->release();
+  vertexBuffer->release();
+  shader->release();
 }
