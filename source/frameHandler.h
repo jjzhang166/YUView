@@ -100,8 +100,8 @@ protected:
   QSize   frameSize;
 
   // Get the pixel value from currentImage. Make sure that currentImage is the correct image.
-  virtual QRgb getPixelVal(QPoint pixelPos) { return currentImage.pixel(pixelPos); }
-  virtual QRgb getPixelVal(int x, int y)    { return currentImage.pixel(x, y);     }
+  virtual QRgb getPixelVal(QPoint pixelPos);
+  virtual QRgb getPixelVal(int x, int y);
 
   // OpenGL drawing
   class SkyBox : protected QOpenGLFunctions

@@ -30,7 +30,7 @@
 #include "videoHandler.h"
 
 #define SPLITVIEW_DEBUG_OUTPUT 0
-#if SPLITVIEW_DEBUG_OUTPUT
+#if SPLITVIEW_DEBUG_OUTPUT && !QT_NO_DEBUG
 #include <QDebug>
 #define DEBUG_SPLITVIEW qDebug
 #else

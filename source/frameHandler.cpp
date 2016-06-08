@@ -20,8 +20,8 @@
 
 #include <QPainter>
 
-#define FRAMEHANDLER_DEBUG_OUTPUT 1
-#if FRAMEHANDLER_DEBUG_OUTPUT
+#define FRAMEHANDLER_DEBUG_OUTPUT 0
+#if FRAMEHANDLER_DEBUG_OUTPUT && !QT_NO_DEBUG
 #include <QDebug>
 #define DEBUG_FRAMEHANDLER qDebug
 #else
@@ -135,10 +135,26 @@ void frameHandler::setFrameSize(QSize newSize, bool emitSignal)
 
 void frameHandler::loadCurrentImageFromFile(QString filePath)
 {
-  currentImage = QImage(filePath).convertToFormat(QImage::Format_RGB888);
-  currentFrame = QPixmap::fromImage(currentImage);
+  QImage input = QImage(filePath).convertToFormat(QImage::Format_RGB888);
+  currentFrame = QPixmap::fromImage(input);
   
-  setFrameSize(currentImage.size());
+  setFrameSize(input.size());
+  skyBox.loadTextureFromCubeMap(input);
+}
+
+QRgb frameHandler::getPixelVal(QPoint pixelPos) 
+{ 
+  if (currentImage.isNull())
+    currentImage = currentFrame.toImage();
+
+  return currentImage.pixel(pixelPos); 
+}
+QRgb frameHandler::getPixelVal(int x, int y)
+{ 
+  if (currentImage.isNull())
+    currentImage = currentFrame.toImage();
+
+  return currentImage.pixel(x, y);     
 }
 
 void frameHandler::slotVideoControlChanged()
@@ -178,8 +194,6 @@ void frameHandler::drawFrame(QPainter *painter, int frameIdx, double zoomFactor,
     // Render the sky box
     DEBUG_FRAMEHANDLER("frameHandler::drawFrame using skyBox");
     painter->beginNativePainting();
-    if (skyBox.textures[0] == NULL)
-      skyBox.loadTextureFromCubeMap(currentImage);
     skyBox.renderSkyBox(modelViewProjectionMatrix);
     painter->endNativePainting();
   }
@@ -488,13 +502,29 @@ void frameHandler::SkyBox::loadTextureFromCubeMap(QImage image)
   int partWidth = image.size().width() / 4;
   int partHeight = image.size().height() / 3;
 
+  // Layout:
+  //   X
+  //  XXXX
+  //   X
+  //// Load all texture images
+  //const QImage posx = image.copy(2 * partWidth,     partHeight, partWidth, partHeight).mirrored();  // To the right
+  //const QImage posy = image.copy(    partWidth,              0, partWidth, partHeight).mirrored();  // Up
+  //const QImage posz = image.copy(    partWidth,     partHeight, partWidth, partHeight).mirrored();  // Straight ahead
+  //const QImage negx = image.copy(            0,     partHeight, partWidth, partHeight).mirrored();  // To the left
+  //const QImage negy = image.copy(    partWidth, 2 * partHeight, partWidth, partHeight).mirrored();  // bottom
+  //const QImage negz = image.copy(3 * partWidth,     partHeight, partWidth, partHeight).mirrored();  // behind us
+
   // Load all texture images
-  const QImage posx = image.copy(2 * partWidth,     partHeight, partWidth, partHeight).mirrored();
-  const QImage posy = image.copy(    partWidth,              0, partWidth, partHeight).mirrored();
-  const QImage posz = image.copy(    partWidth,     partHeight, partWidth, partHeight).mirrored();
-  const QImage negx = image.copy(            0,     partHeight, partWidth, partHeight).mirrored();
-  const QImage negy = image.copy(    partWidth, 2 * partHeight, partWidth, partHeight).mirrored();
-  const QImage negz = image.copy(3 * partWidth,     partHeight, partWidth, partHeight).mirrored();
+  // Layout:
+  //  X
+  //  XXXX
+  //  X
+  const QImage posx = image.copy(    partWidth,     partHeight, partWidth, partHeight).mirrored();  // To the right
+  const QImage posy = image.copy(            0,              0, partWidth, partHeight).mirrored();  // Up
+  const QImage posz = image.copy(            0,     partHeight, partWidth, partHeight).mirrored();  //Straight ahead
+  const QImage negx = image.copy(3 * partWidth,     partHeight, partWidth, partHeight).mirrored();  // To the left
+  const QImage negy = image.copy(            0, 2 * partHeight, partWidth, partHeight).mirrored();  // bottom
+  const QImage negz = image.copy(2 * partWidth,     partHeight, partWidth, partHeight).mirrored();  // behind us
 
   // Load images as independent texture objects
   textures[0] = new QOpenGLTexture(posx);
@@ -552,6 +582,12 @@ void frameHandler::SkyBox::renderSkyBox(const QMatrix4x4 &modelViewProjectionMat
 void frameHandler::slotSkyboxRenderingToggled(bool newValue) 
 { 
   DEBUG_FRAMEHANDLER("frameHandler::slotSkyboxRenderingToggled %d", newValue);
+
+  if (newValue)
+    // The user enabled the skybox rendering. Load the current frame pixmap as texture.
+    // The child item has to load the next texture if the current frame changes while skyBox rendering is on.
+    skyBox.loadTextureFromCubeMap(currentFrame.toImage());
+
   renderSkybox = newValue; 
   emit signalHandlerChanged(true, false); 
 }

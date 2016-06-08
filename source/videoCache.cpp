@@ -19,7 +19,7 @@
 #include "videoCache.h"
 
 #define CACHING_DEBUG_OUTPUT 0
-#if CACHING_DEBUG_OUTPUT
+#if CACHING_DEBUG_OUTPUT && !QT_NO_DEBUG
 #include <QDebug>
 #define DEBUG_CACHING qDebug
 #else

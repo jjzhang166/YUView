@@ -27,7 +27,7 @@
 
 // Activate this if you want to know when wich buffer is loaded/converted to pixmap and so on.
 #define VIDEOHANDLER_DEBUG_LOADING 0
-#if VIDEOHANDLER_DEBUG_LOADING
+#if VIDEOHANDLER_DEBUG_LOADING && !QT_NO_DEBUG
 #define DEBUG_VIDEO qDebug
 #else
 #define DEBUG_VIDEO(fmt,...) ((void)0)
@@ -76,8 +76,6 @@ void videoHandler::drawFrame(QPainter *painter, int frameIdx, double zoomFactor,
       // The frame is buffered
       currentFrame = pixmapCache[frameIdx];
       currentFrameIdx = frameIdx;
-
-      // TODO: Now the yuv values that will be shown using the getPixel(...) function is wrong.
     }
     else
     {
@@ -106,8 +104,15 @@ void videoHandler::drawFrame(QPainter *painter, int frameIdx, double zoomFactor,
           return;
       }
     }
+
+    // currentFrame now contains the correct new frame
+    if (renderSkybox)
+    {
+      // We have to set the new frame as texture in the skybox
+      skyBox.loadTextureFromCubeMap( currentFrame.toImage() );
+    }
   }
-  
+
   // The right frame is loaded. Let the frame handler handle drawing.
   frameHandler::drawFrame(painter, frameIdx, zoomFactor, modelViewProjectionMatrix);
 }

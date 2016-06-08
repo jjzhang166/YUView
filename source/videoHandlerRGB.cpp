@@ -29,7 +29,7 @@
 
 // Activate this if you want to know when wich buffer is loaded/converted to pixmap and so on.
 #define VIDEOHANDLERRGB_DEBUG_LOADING 0
-#if VIDEOHANDLERRGB_DEBUG_LOADING
+#if VIDEOHANDLERRGB_DEBUG_LOADING && !QT_NO_DEBUG
 #define DEBUG_RGB qDebug
 #else
 #define DEBUG_RGB(fmt,...) ((void)0)

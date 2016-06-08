@@ -33,6 +33,8 @@ playlistItemImageFile::playlistItemImageFile(QString filePath) : playlistItemSta
 
   imagePath = filePath;
 
+  connect(&frame, SIGNAL(signalHandlerChanged(bool,bool)), this, SLOT(slotEmitSignalItemChanged(bool,bool)));
+
   // Try to open the image
   frame.loadCurrentImageFromFile(filePath);
 }
