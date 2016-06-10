@@ -62,11 +62,17 @@ frameHandler::frameHandler() : ui(new Ui::frameHandler)
 {
   controlsCreated = false;
   renderSkybox = false;
+  texture2D = NULL;
 }
 
 frameHandler::~frameHandler()
 {
   delete ui;
+  if (texture2D)
+  {
+    texture2D->destroy();
+    delete texture2D;
+  }
 }
 
 QLayout *frameHandler::createFrameHandlerControls(QWidget *parentWidget, bool isSizeFixed)
@@ -140,6 +146,13 @@ void frameHandler::loadCurrentImageFromFile(QString filePath)
   
   setFrameSize(input.size());
   skyBox.loadTextureFromCubeMap(input);
+  
+  if (texture2D == NULL)
+  {
+    texture2D = new QOpenGLTexture(input, QOpenGLTexture::DontGenerateMipMaps);
+    texture2D->setWrapMode(QOpenGLTexture::ClampToBorder);
+    texture2D->setMagnificationFilter(QOpenGLTexture::Nearest);
+  }
 }
 
 QRgb frameHandler::getPixelVal(QPoint pixelPos) 
@@ -199,21 +212,48 @@ void frameHandler::drawFrame(QPainter *painter, int frameIdx, double zoomFactor,
   }
   else
   {
-    DEBUG_FRAMEHANDLER("frameHandler::drawFrame 2D");
-    // Create the video rect with the size of the sequence and center it.
-    QRect videoRect;
-    videoRect.setSize( frameSize * zoomFactor );
-    videoRect.moveCenter( QPoint(0,0) );
+    if (texture2D == NULL)
+      return; 
 
-    // Draw the current image ( currentFrame )
-    painter->drawPixmap( videoRect, currentFrame );
+    DEBUG_FRAMEHANDLER("frameHandler::drawFrame 2D-3D");
+    painter->beginNativePainting();
+
+    glEnable(GL_TEXTURE_2D); // you should use shader, but for an example fixed pipeline is ok ;)
     
-    if (zoomFactor >= 64)
-    {
-      // Draw the pixel values onto the pixels
-      drawPixelValues(painter, videoRect, zoomFactor);
-    }
+    texture2D->bind();
+    glBegin(GL_TRIANGLE_STRIP);  // draw something with the texture on
+    glTexCoord2f(0.0, 0.0);
+    glVertex2f(-1.0 * zoomFactor, 1.0);
+ 
+    glTexCoord2f(1.0, 0.0);
+    glVertex2f(1.0 * zoomFactor, 1.0 * zoomFactor);
+ 
+    glTexCoord2f(0.0, 1.0);
+    glVertex2f(-1.0 * zoomFactor, -1.0 * zoomFactor);
+ 
+    glTexCoord2f(1.0, 1.0);
+    glVertex2f(1.0 * zoomFactor, -1.0 * zoomFactor);
+    texture2D->release();
+    glEnd();
+
+    painter->endNativePainting();
   }
+  //{
+  //  DEBUG_FRAMEHANDLER("frameHandler::drawFrame 2D");
+  //  // Create the video rect with the size of the sequence and center it.
+  //  QRect videoRect;
+  //  videoRect.setSize( frameSize * zoomFactor );
+  //  videoRect.moveCenter( QPoint(0,0) );
+
+  //  // Draw the current image ( currentFrame )
+  //  painter->drawPixmap( videoRect, currentFrame );
+  //  
+  //  if (zoomFactor >= 64)
+  //  {
+  //    // Draw the pixel values onto the pixels
+  //    drawPixelValues(painter, videoRect, zoomFactor);
+  //  }
+  //}
 }
 
 void frameHandler::drawPixelValues(QPainter *painter, QRect videoRect, double zoomFactor, frameHandler *item2)
@@ -496,7 +536,10 @@ void frameHandler::SkyBox::loadTextureFromCubeMap(QImage image)
   {
     // delete the old texture
     for (int i = 0; i < 6; i++)
+    {
+      textures[i]->destroy();
       delete textures[i];
+    }
   }
 
   int partWidth = image.size().width() / 4;
@@ -564,7 +607,7 @@ void frameHandler::SkyBox::renderSkyBox(const QMatrix4x4 &modelViewProjectionMat
   shader->setUniformValue("qt_ModelViewProjectionMatrix", modelViewProjectionMatrix);
 
   for(int i=0; i<6; i++)
-  {
+ { 
     textures[i]->bind(i+1);
     shader->setUniformValue("qt_Texture0", (i+1));
 

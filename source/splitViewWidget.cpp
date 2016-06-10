@@ -79,10 +79,27 @@ splitViewWidget::splitViewWidget(QWidget *parent, bool separateView)
   // We want to have all mouse events (even move)
   setMouseTracking(true);
 
-  //// Set multisampling to 4 samples
-  //QSurfaceFormat format;
+  // Set multisampling to 4 samples
+  QSurfaceFormat glFormat = format();
+  int	alphaBufferSize = glFormat.alphaBufferSize();
+  int	blueBufferSize = glFormat.blueBufferSize();
+  int	depthBufferSize = glFormat.depthBufferSize();
+  int	greenBufferSize = glFormat.greenBufferSize();
+  bool hasAlpha = glFormat.hasAlpha();
+  int	majorVersion = glFormat.majorVersion();
+  int	minorVersion = glFormat.minorVersion();
+  QSurfaceFormat::FormatOptions	options = glFormat.options();
+  QSurfaceFormat::OpenGLContextProfile profile = glFormat.profile();
+  int	redBufferSize = glFormat.redBufferSize();
+  QSurfaceFormat::RenderableType renderableType = glFormat.renderableType();
+  int	samples = glFormat.samples();
+  bool stereo = glFormat.stereo();
+  QSurfaceFormat::SwapBehavior swapBehavior = glFormat.swapBehavior();
+  int	swapInterval = glFormat.swapInterval();
+  QPair<int, int> version = glFormat.version();
+
   //format.setSamples(4);
-  //setFormat(format);
+  setFormat(glFormat);
 }
 
 splitViewWidget::~splitViewWidget()

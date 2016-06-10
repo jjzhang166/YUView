@@ -120,6 +120,9 @@ protected:
   };
   SkyBox skyBox;
   bool renderSkybox;
+
+  // OpenGL test
+  QOpenGLTexture *texture2D;
     
 private:
 
