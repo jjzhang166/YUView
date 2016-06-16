@@ -25,6 +25,7 @@
 #include <QDomElement>
 #include <QDir>
 #include <QMatrix4x4>
+#include <QMutex>
 
 #include <assert.h>
 
